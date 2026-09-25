@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>心拍カウント課題（HCT）</title>
+<style>
+  :root {
+    --bg: #f7f7f8;
+    --card: #ffffff;
+    --text: #1a1a1a;
+    --sub: #6b7280;
+    --accent: #2563eb;
+    --border: #e5e7eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111214; --card: #1c1d20; --text: #f2f2f2; --sub: #9ca3af; --border: #2d2f33;
+    }
+  }
+  :root[data-theme="dark"] { --bg: #111214; --card: #1c1d20; --text: #f2f2f2; --sub: #9ca3af; --border: #2d2f33; }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Hiragino Sans, "Noto Sans JP", sans-serif;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    min-height: 100%;
+  }
+  html, body { height: 100%; }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; min-height: 100%; display: flex; flex-direction: column; }
+  .screen { display: none; flex: 1; flex-direction: column; }
+  .screen.active { display: flex; }
+  h1 { font-size: 1.1rem; margin: 4px 0 14px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+  p.inst { line-height: 1.9; font-size: 0.95rem; margin: 0 0 14px; }
+  .warn-box {
+    background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
+    border-radius: 10px; padding: 12px 14px; font-weight: 700; font-size: 0.92rem; line-height: 1.7; margin-bottom: 14px;
+  }
+  :root:not([data-theme="light"]) .warn-box { background: #3f1d1d; border-color: #7f1d1d; color: #fca5a5; }
+  button {
+    width: 100%; padding: 15px 10px; border-radius: 12px; border: none;
+    background: var(--accent); color: white; font-size: 1rem; font-weight: 700; cursor: pointer; margin-top: 8px;
+  }
+  button:disabled { opacity: 0.4; }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .center-flex { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .fixation { font-size: 3rem; color: var(--sub); user-select: none; }
+  .trial-label { text-align: center; color: var(--sub); font-size: 0.85rem; margin-bottom: 6px; }
+  input[type=number] {
+    width: 100%; padding: 14px; font-size: 1.4rem; text-align: center; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text); margin-bottom: 10px;
+  }
+  input[type=range] { width: 100%; margin: 18px 0 6px; }
+  .slider-labels { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--sub); }
+  .slider-val { text-align: center; font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+  .finger-indicator {
+    display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 12px; margin-bottom: 14px;
+    background: #6b7280; transition: background-color 0.25s ease;
+  }
+  .finger-indicator.state-settling { background: #d97706; }
+  .finger-indicator.state-measuring-poor { background: #dc2626; }
+  .finger-indicator.state-measuring-good { background: #16a34a; }
+  .finger-icon { font-size: 2rem; line-height: 1; }
+  .finger-text { color: white; font-weight: 700; font-size: 0.9rem; }
+  #ppg-container { display: none; }
+  table.results { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  table.results th, table.results td { border: 1px solid var(--border); padding: 6px 8px; text-align: center; }
+  .note { font-size: 0.78rem; color: var(--sub); line-height: 1.5; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 画面1: 教示 -->
+  <div class="screen active" id="screen-intro">
+    <h1>心拍カウント課題</h1>
+    <div class="card">
+      <p class="inst">これから、あなたの心臓の鼓動（心拍）を数える課題を行います。<br><br>
+      合図が出たら、画面の点を見つめたまま、ご自分の心拍を心の中で数えてください。「1」から数え始め、声には出さず、指などで数えたりもせず、静かに心の中だけでカウントしてください。<br><br>
+      終了の合図が出たら数えるのをやめ、その時点までに数えた回数を入力してください。</p>
+      <div class="warn-box">
+        ⚠️ 手首や首などに触れて脈を測ったり、時計や時間の表示を見たりしないでください。<br>
+        ご自身が「本当に感じた」心拍の感覚だけを頼りに数えてください。
+      </div>
+      <p class="inst" style="margin-bottom:0;">まず練習を1回行ってから、本番を3回行います。</p>
+    </div>
+    <button id="toFingerBtn">準備ができたら次へ</button>
+  </div>
+
+  <!-- 画面2: 指の設置確認 -->
+  <div class="screen" id="screen-finger">
+    <h1>センサーの準備</h1>
+    <div class="card">
+      <p class="inst">スマートフォン背面のカメラとフラッシュ（ライト）を、指でまとめて覆ってください。軽く触れる程度で構いません。</p>
+      <div id="fingerIndicator" class="finger-indicator">
+        <div id="fingerIcon" class="finger-icon">👆</div>
+        <div id="fingerText" class="finger-text">指をカメラとフラッシュに当ててください</div>
+      </div>
+      <div id="ppg-container"></div>
+    </div>
+    <button id="toTrialBtn" disabled>信号が安定したら次へ</button>
+  </div>
+
+  <!-- 画面3: 試行前の案内 -->
+  <div class="screen" id="screen-trial-ready">
+    <div class="center-flex">
+      <div class="trial-label" id="trialReadyLabel"></div>
+      <div class="card" style="text-align:center;">
+        <p class="inst" id="trialReadyText" style="margin-bottom:0;"></p>
+      </div>
+      <button id="startTrialBtn">開始する</button>
+    </div>
+  </div>
+
+  <!-- 画面4: カウント中（時計等の手がかりは一切表示しない） -->
+  <div class="screen" id="screen-counting">
+    <div class="center-flex">
+      <div class="fixation">●</div>
+    </div>
+  </div>
+
+  <!-- 画面5: 回答入力 -->
+  <div class="screen" id="screen-response">
+    <div class="center-flex" style="justify-content:flex-start; padding-top:30px;">
+      <div class="card" style="width:100%;">
+        <p class="inst">何回、心拍を感じましたか？</p>
+        <input type="number" id="countInput" inputmode="numeric" min="0" placeholder="回数を入力">
+        <button id="submitCountBtn">次へ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 画面6: 信頼度評定 -->
+  <div class="screen" id="screen-confidence">
+    <div class="center-flex" style="justify-content:flex-start; padding-top:30px;">
+      <div class="card" style="width:100%;">
+        <p class="inst">その回答に、どれくらい自信がありますか？</p>
+        <div class="slider-val" id="confVal">50</div>
+        <input type="range" id="confSlider" min="0" max="100" value="50">
+        <div class="slider-labels"><span>全く自信がない</span><span>非常に自信がある</span></div>
+        <button id="submitConfBtn">次へ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 画面7: 結果 -->
+  <div class="screen" id="screen-results">
+    <h1>結果</h1>
+    <div class="card">
+      <table class="results" id="resultsTable"></table>
+      <div class="note" id="overallAccuracy"></div>
+    </div>
+    <div class="note">
+      ※「実測」は、計測した心拍データのうち、各試行の時間内に検出された拍動数です。この機能はppg-jsによる簡易測定であり、臨床的な妥当性検証を経たものではありません。デバッグ用に生データも保存されています。
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@sontakey/ppg-js/dist/index.global.js"></script>
+<script>
+  // ===== 試行設計：1回目=練習30秒、2〜4回目=本番 25秒/35秒/45秒 =====
+  const TRIALS = [
+    { label: '練習試行', seconds: 30, practice: true },
+    { label: '本番 1回目', seconds: 25, practice: false },
+    { label: '本番 2回目', seconds: 35, practice: false },
+    { label: '本番 3回目', seconds: 45, practice: false }
+  ];
+
+  let ppg = null;
+  let currentTrialIndex = 0;
+  let sessionStartMs = null;
+  let trialWindows = []; // {startMs, endMs} relative to sessionStartMs, per trial
+  let responses = []; // {count, confidence}
+
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  // ---- 画面1→2 ----
+  document.getElementById('toFingerBtn').addEventListener('click', () => {
+    show('screen-finger');
+    startPpg();
+  });
+
+  function startPpg() {
+    if (typeof PPG === 'undefined') {
+      document.getElementById('fingerText').textContent = 'エラー: 測定ライブラリを読み込めませんでした。通信環境を確認してください。';
+      return;
+    }
+    ppg = new PPG.PPGMonitor('#ppg-container', {
+      onReady: () => { sessionStartMs = Date.now(); },
+      onQualityUpdate: (m) => updateFingerUI(m),
+      onFrame: () => { if (ppg) { try { updateFingerUI(ppg.getMetrics()); } catch (e) {} } },
+      onError: (err) => { document.getElementById('fingerText').textContent = 'エラー: ' + err.message; }
+    });
+    ppg.start();
+  }
+
+  function updateFingerUI(m) {
+    if (!m) return;
+    const box = document.getElementById('fingerIndicator');
+    const icon = document.getElementById('fingerIcon');
+    const text = document.getElementById('fingerText');
+    box.classList.remove('state-settling', 'state-measuring-poor', 'state-measuring-good');
+    const toTrialBtn = document.getElementById('toTrialBtn');
+
+    if (m.fingerState === 'SETTLING') {
+      box.classList.add('state-settling'); icon.textContent = '⏳';
+      text.textContent = '安定待ち中... そのまま動かさないでください';
+      toTrialBtn.disabled = true;
+    } else if (m.fingerState === 'MEASURING' && m.quality && m.quality.good) {
+      box.classList.add('state-measuring-good'); icon.textContent = '✅';
+      text.textContent = '良好な信号です。次へ進めます';
+      toTrialBtn.disabled = false;
+    } else if (m.fingerState === 'MEASURING') {
+      box.classList.add('state-measuring-poor'); icon.textContent = '⚠️';
+      text.textContent = '信号が不安定です: ' + (m.quality && m.quality.reason ? m.quality.reason : '');
+      toTrialBtn.disabled = true;
+    } else {
+      icon.textContent = '👆'; text.textContent = '指をカメラとフラッシュに当ててください';
+      toTrialBtn.disabled = true;
+    }
+  }
+
+  // ---- 画面2→3 ----
+  document.getElementById('toTrialBtn').addEventListener('click', () => {
+    currentTrialIndex = 0;
+    showTrialReady();
+  });
+
+  function showTrialReady() {
+    const t = TRIALS[currentTrialIndex];
+    document.getElementById('trialReadyLabel').textContent = t.label + '（' + (currentTrialIndex + 1) + ' / ' + TRIALS.length + '）';
+    document.getElementById('trialReadyText').textContent =
+      '「開始する」を押すと画面に点が表示されます。その瞬間から心拍を数え始めてください。終了の合図があるまで、点を見つめたまま数え続けてください。';
+    show('screen-trial-ready');
+  }
+
+  // ---- 画面3→4: 試行開始 ----
+  document.getElementById('startTrialBtn').addEventListener('click', () => {
+    show('screen-counting');
+    const t = TRIALS[currentTrialIndex];
+    const startMs = Date.now() - sessionStartMs;
+    setTimeout(() => {
+      const endMs = Date.now() - sessionStartMs;
+      trialWindows[currentTrialIndex] = { startMs, endMs };
+      show('screen-response');
+      document.getElementById('countInput').value = '';
+      document.getElementById('countInput').focus();
+    }, t.seconds * 1000);
+  });
+
+  // ---- 画面5→6 ----
+  document.getElementById('submitCountBtn').addEventListener('click', () => {
+    const val = document.getElementById('countInput').value;
+    if (val === '' || isNaN(val)) { alert('回数を入力してください'); return; }
+    responses[currentTrialIndex] = { count: parseInt(val, 10) };
+    document.getElementById('confSlider').value = 50;
+    document.getElementById('confVal').textContent = '50';
+    show('screen-confidence');
+  });
+
+  document.getElementById('confSlider').addEventListener('input', (e) => {
+    document.getElementById('confVal').textContent = e.target.value;
+  });
+
+  // ---- 画面6→次の試行 or 結果 ----
+  document.getElementById('submitConfBtn').addEventListener('click', () => {
+    responses[currentTrialIndex].confidence = parseInt(document.getElementById('confSlider').value, 10);
+    currentTrialIndex++;
+    if (currentTrialIndex < TRIALS.length) {
+      showTrialReady();
+    } else {
+      finishSession();
+    }
+  });
+
+  // ---- 終了処理・採点 ----
+  function finishSession() {
+    let tacho = [];
+    try { tacho = ppg ? ppg.getTachogram() : []; } catch (e) { tacho = []; }
+    if (ppg) { try { ppg.stop(); } catch (e) {} }
+
+    const tbl = document.getElementById('resultsTable');
+    let html = '<tr><th>試行</th><th>報告数</th><th>実測数</th><th>信頼度</th><th>正確さ</th></tr>';
+    let accSum = 0, accN = 0;
+
+    TRIALS.forEach((t, i) => {
+      const win = trialWindows[i] || {};
+      // tachogramの各エントリのタイムスタンプ(秒)がセッション開始からの経過秒である前提で、
+      // 試行の時間窓に入る拍動をカウントする。ライブラリの実際のタイムスタンプ仕様は
+      // テスト時に必ず検証すること（wall-clockとのズレがあれば要調整）。
+      const winStartSec = (win.startMs || 0) / 1000;
+      const winEndSec = (win.endMs || 0) / 1000;
+      const beatsInWindow = tacho.filter(b => (b.t >= winStartSec && b.t <= winEndSec) && b.valid !== false);
+      const realCount = beatsInWindow.length;
+      const reported = responses[i] ? responses[i].count : null;
+      const conf = responses[i] ? responses[i].confidence : null;
+
+      let accStr = '—';
+      if (reported !== null && realCount > 0) {
+        const acc = 1 - Math.abs(realCount - reported) / ((realCount + reported) / 2);
+        accStr = acc.toFixed(2);
+        if (!t.practice) { accSum += acc; accN++; }
+      }
+
+      html += '<tr><td>' + t.label + '</td><td>' + (reported ?? '—') + '</td><td>' + realCount +
+        '</td><td>' + (conf ?? '—') + '</td><td>' + accStr + '</td></tr>';
+    });
+    tbl.innerHTML = html;
+
+    document.getElementById('overallAccuracy').textContent = accN > 0
+      ? '本番3試行の平均正確さスコア: ' + (accSum / accN).toFixed(3)
+      : '正確さスコアを算出できませんでした（実測データ不足の可能性）。';
+
+    show('screen-results');
+  }
+</script>
+</body>
+</html>
